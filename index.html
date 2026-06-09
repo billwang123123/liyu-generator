@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>李语生成器</title>
+    <!-- 引入 Tailwind CSS 用于快速设置样式 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Phosphor 图标库 -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body class="bg-gray-900 min-h-screen relative overflow-hidden flex items-center justify-center p-4 font-sans text-gray-800">
+    
+    <!-- 动态背景图片 -->
+    <img id="bgImage" alt="background" class="absolute inset-0 w-full h-full object-cover z-0 hidden" />
+    
+    <!-- 减弱遮罩 -->
+    <div class="absolute inset-0 bg-black/40 z-0"></div>
+
+    <!-- 上传背景图按钮 -->
+    <div class="absolute top-4 right-4 z-20">
+        <label class="cursor-pointer bg-white/10 hover:bg-white/20 backdrop-blur-md px-4 py-2 rounded-full text-white text-sm flex items-center gap-2 transition-colors border border-white/20 shadow-lg">
+            <i class="ph ph-image text-lg"></i>
+            <span>设置专属背景图</span>
+            <input type="file" accept="image/*" class="hidden" id="bgInput" />
+        </label>
+    </div>
+
+    <!-- 主体卡片 -->
+    <div class="max-w-3xl w-full bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl overflow-hidden border border-white/20 relative z-10">
+        
+        <!-- 顶部标题区 -->
+        <div class="bg-gray-900/80 p-6 text-center relative overflow-hidden backdrop-blur-md">
+            <h1 class="text-2xl font-bold text-white tracking-wider relative z-10">李语生成器</h1>
+            <p class="text-blue-200 mt-2 text-sm relative z-10">和李芃贝吵架没招了吗，快试试李语生成器</p>
+        </div>
+
+        <div class="p-6 sm:p-8">
+            <!-- 控制区 -->
+            <div class="flex flex-col sm:flex-row gap-4 items-end mb-6">
+                <div class="flex-1 w-full">
+                    <label for="lengthInput" class="block text-sm font-medium text-gray-700 mb-1">目标字数 (整数)</label>
+                    <input id="lengthInput" type="number" min="1" value="50" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow" placeholder="例如: 100" />
+                </div>
+                <button id="generateBtn" class="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm flex items-center justify-center gap-2 transition-colors active:scale-95">
+                    <i class="ph ph-arrows-clockwise text-lg"></i>
+                    <span>立即生成</span>
+                </button>
+            </div>
+
+            <!-- 错误提示 -->
+            <div id="errorBox" class="hidden mb-4 p-3 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm animate-pulse">
+                <!-- 错误信息将显示在这里 -->
+            </div>
+
+            <!-- 字库展示 -->
+            <div class="mb-6 bg-gray-50/90 p-3 rounded-lg border border-gray-100 flex flex-wrap gap-2 items-center" id="charSetContainer">
+                <span class="text-sm text-gray-500">当前字库：</span>
+                <!-- 字库标签由 JS 动态生成 -->
+            </div>
+
+            <!-- 结果展示区 -->
+            <div class="relative">
+                <div class="absolute top-0 right-0 p-2 flex gap-2">
+                    <button id="copyBtn" disabled title="复制到剪贴板" class="p-2 rounded-md flex items-center justify-center transition-colors text-gray-300 cursor-not-allowed">
+                        <i id="copyIcon" class="ph ph-copy text-xl"></i>
+                    </button>
+                </div>
+                
+                <textarea id="resultArea" readonly placeholder="生成的李语将显示在这里..." class="w-full h-48 p-4 pr-12 bg-white/80 backdrop-blur-sm border border-gray-200 rounded-xl resize-none focus:ring-2 focus:ring-indigo-500 outline-none text-gray-700 leading-relaxed break-all"></textarea>
+                
+                <div id="wordCount" class="absolute bottom-3 right-4 text-xs text-gray-400">
+                    共 0 字
+                </div>
+            </div>
+            
+        </div>
+    </div>
+
+    <!-- 底部关注提示 -->
+    <div class="absolute bottom-6 left-0 w-full text-center z-20 pointer-events-none">
+        <p class="text-white/60 text-sm tracking-widest drop-shadow-md font-medium">关注BillWang喵，关注BillWang谢谢喵</p>
+    </div>
+
+    <!-- 逻辑代码 -->
+    <script>
+        // 目标字库
+        const charSet = ['猪', '雷', '缸', '骚', '压', '球', '蛋', '咪', '乐', '操'];
+        
+        // DOM 元素获取
+        const lengthInput = document.getElementById('lengthInput');
+        const generateBtn = document.getElementById('generateBtn');
+        const errorBox = document.getElementById('errorBox');
+        const charSetContainer = document.getElementById('charSetContainer');
+        const resultArea = document.getElementById('resultArea');
+        const copyBtn = document.getElementById('copyBtn');
+        const copyIcon = document.getElementById('copyIcon');
+        const wordCount = document.getElementById('wordCount');
+        const bgInput = document.getElementById('bgInput');
+        const bgImage = document.getElementById('bgImage');
+
+        // 初始化字库显示
+        charSet.forEach(char => {
+            const span = document.createElement('span');
+            span.className = 'px-2 py-1 bg-white border border-gray-200 rounded text-sm text-indigo-700 font-medium shadow-sm';
+            span.innerText = char;
+            charSetContainer.appendChild(span);
+        });
+
+        // 显示错误信息
+        function showError(msg) {
+            errorBox.innerText = msg;
+            errorBox.classList.remove('hidden');
+            resultArea.value = '';
+            updateCopyButton(false);
+            updateWordCount(0);
+        }
+
+        function hideError() {
+            errorBox.classList.add('hidden');
+        }
+
+        // 更新复制按钮状态
+        function updateCopyButton(hasContent) {
+            if (hasContent) {
+                copyBtn.disabled = false;
+                copyBtn.className = 'p-2 rounded-md flex items-center justify-center transition-colors text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 active:bg-indigo-100';
+            } else {
+                copyBtn.disabled = true;
+                copyBtn.className = 'p-2 rounded-md flex items-center justify-center transition-colors text-gray-300 cursor-not-allowed';
+            }
+        }
+
+        // 更新字数
+        function updateWordCount(count) {
+            wordCount.innerText = `共 ${count} 字`;
+        }
+
+        // 生成逻辑
+        function generateText() {
+            hideError();
+            const length = parseInt(lengthInput.value, 10);
+            
+            if (isNaN(length) || length <= 0) {
+                showError('请输入大于 0 的有效整数！');
+                return;
+            }
+            if (length > 100000) {
+                showError('字数太多啦，为了浏览器不卡顿，建议输入 100000 以内的数字哦！');
+                return;
+            }
+
+            let generatedString = '';
+            for (let i = 0; i < length; i++) {
+                const randomIndex = Math.floor(Math.random() * charSet.length);
+                generatedString += charSet[randomIndex];
+            }
+
+            resultArea.value = generatedString;
+            updateCopyButton(true);
+            updateWordCount(generatedString.length);
+        }
+
+        // 绑定生成按钮和回车键
+        generateBtn.addEventListener('click', generateText);
+        lengthInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') generateText();
+        });
+
+        // 复制逻辑
+        copyBtn.addEventListener('click', () => {
+            if (!resultArea.value) return;
+
+            resultArea.select();
+            resultArea.setSelectionRange(0, 999999); // 适配移动端
+
+            try {
+                document.execCommand('copy');
+                // 变成对号
+                copyIcon.className = 'ph ph-check text-xl';
+                copyBtn.classList.replace('text-gray-500', 'text-green-600');
+                copyBtn.classList.replace('hover:text-indigo-600', 'hover:text-green-700');
+                
+                // 2秒后恢复
+                setTimeout(() => {
+                    copyIcon.className = 'ph ph-copy text-xl';
+                    copyBtn.classList.replace('text-green-600', 'text-gray-500');
+                    copyBtn.classList.replace('hover:text-green-700', 'hover:text-indigo-600');
+                }, 2000);
+            } catch (err) {
+                showError('复制失败，请手动选择文本复制。');
+            }
+            // 清除选中状态
+            window.getSelection().removeAllRanges();
+        });
+
+        // 上传背景图逻辑
+        bgInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    bgImage.src = reader.result;
+                    bgImage.classList.remove('hidden'); // 显示图片
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    </script>
+</body>
+</html>
